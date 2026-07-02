@@ -1,4 +1,4 @@
-# gopro_esp32c6_pairing
+# GoPro_ESP32C6_Remote
 
 Cible ESP-IDF **5.5.4**, chip `esp32c6`.
 
