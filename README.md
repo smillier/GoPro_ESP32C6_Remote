@@ -1,22 +1,22 @@
 # GoPro_ESP32C6_Remote
 
-Cible ESP-IDF **5.5.4**, chip `esp32c6`.
+ESP-IDF target **5.5.4**, `esp32c6` chip.
 
-Firmware de contrôle GoPro par BLE (bonding "Legacy Pairing", protocole
-Open GoPro) avec 4 boutons physiques et une LED de statut RGB.
+BLE-based GoPro control firmware ("Legacy Pairing" bonding, Open GoPro
+protocol) with 4 physical buttons and an RGB status LED.
 
-> Une version antérieure incluait un portail WiFi (SoftAP + interface
-> web mobile). Elle a été retirée : la cohabitation radio BLE/WiFi sur
-> l'ESP32-C6 (une seule antenne partagée) posait trop de problèmes de
-> fiabilité (timeouts d'association WiFi pendant que le BLE scanne).
-> Le contrôle se fait uniquement via les 4 boutons physiques.
+> An earlier version included a WiFi portal (SoftAP + mobile web
+> interface). It was removed: BLE/WiFi radio coexistence on the
+> ESP32-C6 (a single shared antenna) caused too many reliability
+> issues (WiFi association timeouts while BLE was scanning). Control
+> is now done entirely through the 4 physical buttons.
 
 ## Architecture
 
-Le firmware est construit autour d'une couche d'état centralisée
-(`app_state`) et d'une couche de contrôle partagée (`gopro_control`) :
-les boutons physiques appellent des fonctions de contrôle qui
-lisent/écrivent un état central — aucune logique dupliquée.
+The firmware is built around a centralized state layer (`app_state`)
+and a shared control layer (`gopro_control`): the physical buttons
+call control functions that read/write a central state — no
+duplicated logic.
 
 ```
                     ┌──────────────┐
@@ -26,124 +26,122 @@ lisent/écrivent un état central — aucune logique dupliquée.
                            │
                            ▼
                    gopro_control.c
-                (actions de haut niveau)
+                (high-level actions)
                            │
              ┌─────────────┼─────────────┐
              ▼             ▼             ▼
        gopro_ble.c    app_state.c   led_status.c
-       (BLE/GATT)    (état partagé)  (LED WS2812)
+       (BLE/GATT)    (shared state)  (WS2812 LED)
 ```
 
 ## Structure
 
 ```
 gopro_esp32c6_pairing/
-├── CMakeLists.txt          # projet racine ESP-IDF
-├── sdkconfig.defaults       # config NimBLE + bonding, cible esp32c6
-├── .vscode/                 # config VSCode + extension ESP-IDF
+├── CMakeLists.txt          # ESP-IDF root project
+├── sdkconfig.defaults       # NimBLE + bonding config, esp32c6 target
+├── .vscode/                 # VSCode config + ESP-IDF extension
 └── main/
     ├── CMakeLists.txt
     ├── idf_component.yml    # pulls in espressif/led_strip (WS2812 driver)
-    ├── version.h             # nom/version du firmware
-    ├── main.c               # app_main: NVS, host NimBLE, params sécurité
-    ├── app_state.c/.h        # état partagé (connexion / enregistrement / mode)
-    ├── gopro_control.c/.h    # actions de haut niveau (boutons)
-    ├── gopro_ble.c/.h        # scan -> connect -> bonding -> discovery -> commandes
-    ├── led_status.c/.h       # LED RGB WS2812 (GPIO8) = statut de connexion
+    ├── version.h             # firmware name/version
+    ├── main.c               # app_main: NVS, NimBLE host, security params
+    ├── app_state.c/.h        # shared state (connection / recording / mode)
+    ├── gopro_control.c/.h    # high-level actions (buttons)
+    ├── gopro_ble.c/.h        # scan -> connect -> bonding -> discovery -> commands
+    ├── led_status.c/.h       # WS2812 RGB LED (GPIO8) = connection status
     └── buttons.c/.h          # GPIO2/3/4/18 = shutter / power / mode / reset
 ```
 
-## Matériel (ESP32-C6 Super Mini)
+## Hardware (ESP32-C6 Super Mini)
 
-- **LED RGB WS2812** : déjà intégrée sur la carte, câblée sur **GPIO8**.
-  Rien à brancher, le code la pilote directement.
-- **4 boutons**, chacun câblé entre son GPIO et **GND** (pull-up
-  interne activé dans le code, pas besoin de résistance externe) :
-  - **GPIO2** : start/stop enregistrement (shutter)
-  - **GPIO3** : marche/veille caméra (power)
-  - **GPIO4** : changement de mode (Vidéo → Photo → Timelapse → ...)
-  - **GPIO18** : redémarrage de l'ESP32 (reset logiciel, `esp_restart()`)
+- **WS2812 RGB LED**: already built into the board, wired to **GPIO8**.
+  Nothing to connect, the code drives it directly.
+- **4 buttons**, each wired between its GPIO and **GND** (internal
+  pull-up enabled in code, no external resistor needed):
+  - **GPIO2**: start/stop recording (shutter)
+  - **GPIO3**: camera wake/sleep (power)
+  - **GPIO4**: mode change (Video → Photo → Timelapse → ...)
+  - **GPIO18**: ESP32 restart (software reset, `esp_restart()`)
 
-### Signification des couleurs de la LED
+### LED color meaning
 
-| Couleur                | État                                              |
-|-------------------------|---------------------------------------------------|
-| Bleu clignotant          | Recherche de la GoPro (mets-la en mode pairing)  |
-| Jaune fixe               | Connecté, découverte GATT / bonding en cours      |
-| Vert fixe                | Prêt — appui sur le bouton pour démarrer          |
-| Rouge clignotant         | Enregistrement en cours                           |
+| Color                   | State                                              |
+|--------------------------|-----------------------------------------------------|
+| Blinking blue            | Searching for the GoPro (put it in pairing mode)   |
+| Solid yellow             | Connected, GATT discovery / bonding in progress     |
+| Solid green              | Ready — press the button to start                   |
+| Blinking red             | Recording in progress                                |
 
-### Comportement des boutons
+### Button behavior
 
-- **Shutter (GPIO2)** : ignoré tant que la LED n'est pas verte.
-  Bascule start/stop à chaque appui.
-- **Power (GPIO3)** :
-  - Si la GoPro est connectée → envoie la commande `Sleep` (0x05),
-    la caméra se met en veille et se déconnecte.
-  - Si la GoPro n'est pas connectée → relance immédiatement un scan.
-    Une GoPro en veille continue d'annoncer en BLE ; s'y reconnecter
-    est ce qui la réveille. **Il n'existe pas de commande BLE
-    "power on" séparée** — c'est la reconnexion elle-même qui réveille
-    la caméra, donc ce bouton agit bien comme un vrai bouton
-    marche/veille dans les deux sens.
-- **Mode (GPIO4)** : envoie `Load Preset Group` (0x3E) et fait
-  défiler Vidéo → Photo → Timelapse → Vidéo... Ignoré tant que la
-  caméra n'est pas prête. La GoPro refuse ce changement pendant un
-  enregistrement (comportement normal de la caméra, pas une erreur
-  du code).
-- **Reset (GPIO18)** : redémarre l'ESP32 (`esp_restart()`), avec un
-  court délai pour laisser les logs/réponses en cours se terminer
-  proprement.
+- **Shutter (GPIO2)**: ignored until the LED is green. Toggles
+  start/stop on each press.
+- **Power (GPIO3)**:
+  - If the GoPro is connected → sends the `Sleep` command (0x05),
+    the camera goes to sleep and disconnects.
+  - If the GoPro is not connected → immediately restarts a scan.
+    A sleeping GoPro keeps advertising over BLE; reconnecting to it
+    is what wakes it up. **There is no separate "power on" BLE
+    command** — reconnecting itself is what wakes the camera, so
+    this button genuinely behaves like a real wake/sleep button in
+    both directions.
+- **Mode (GPIO4)**: sends `Load Preset Group` (0x3E) and cycles
+  through Video → Photo → Timelapse → Video... Ignored until the
+  camera is ready. The GoPro rejects this change while recording
+  (normal camera behavior, not a code error).
+- **Reset (GPIO18)**: restarts the ESP32 (`esp_restart()`), with a
+  short delay to let any in-flight logs/responses finish cleanly.
 
-## Pourquoi ça fonctionne (rappel)
+## Why this works (recap)
 
-1. La GoPro doit être mise en mode pairing via son écran
-   (Préférences → Connexions → Connecter un appareil).
-2. On scanne les advertisements filtrés sur le service `0xFEA6`.
-3. **Étape clé** : une fois connecté, on découvre d'abord les services/
-   caractéristiques GATT, puis on appelle `ble_gap_security_initiate()`
-   pour déclencher le bonding (Just Works, pas de saisie de code — la
-   GoPro n'a pas d'écran d'entrée). **Confirmé sur cette caméra** :
-   il faut utiliser le **Legacy Pairing** (`ble_hs_cfg.sm_sc = 0`)
-   plutôt que LE Secure Connections — avec `sm_sc = 1`, la GoPro
-   coupait systématiquement la connexion (reason 531 / HCI 0x13) dès
-   la demande de sécurité, même après avoir laissé le lien se stabiliser
-   via la découverte GATT et réduit la distribution de clés à `ENC`
-   seul. Sans bonding réussi, la connexion GATT est acceptée mais la
-   GoPro ignore silencieusement toute commande.
-4. Une fois le lien chiffré (`BLE_GAP_EVENT_ENC_CHANGE` avec
-   `status == 0`), on découvre les caractéristiques du service FEA6
-   et on s'abonne (écriture CCCD) à celles en `notify`.
-5. `gopro_send_shutter(true/false)` écrit sur la caractéristique
-   Command (`0x0072`) pour démarrer/arrêter l'enregistrement.
+1. The GoPro must be put into pairing mode from its screen
+   (Preferences → Connections → Connect Device).
+2. We scan for advertisements filtered on service `0xFEA6`.
+3. **Key step**: once connected, we first discover the GATT
+   services/characteristics, then call `ble_gap_security_initiate()`
+   to trigger bonding (Just Works, no code entry — the GoPro has no
+   input screen). **Confirmed on this camera**: you must use
+   **Legacy Pairing** (`ble_hs_cfg.sm_sc = 0`) rather than LE Secure
+   Connections — with `sm_sc = 1`, the GoPro consistently terminated
+   the connection (reason 531 / HCI 0x13) as soon as security was
+   requested, even after letting the link settle via GATT discovery
+   and narrowing key distribution to `ENC` only. Without successful
+   bonding, the GATT connection is accepted but the GoPro silently
+   ignores every command.
+4. Once the link is encrypted (`BLE_GAP_EVENT_ENC_CHANGE` with
+   `status == 0`), we discover the FEA6 service's characteristics and
+   subscribe (CCCD write) to the `notify` ones.
+5. `gopro_send_shutter(true/false)` writes to the Command
+   characteristic (`0x0072`) to start/stop recording.
 
-Les clés de bonding (LTK) sont persistées en NVS
-(`CONFIG_BT_NIMBLE_NVS_PERSIST=y`), donc le re-pairing manuel n'est
-nécessaire qu'après un factory reset de la caméra.
+Bonding keys (LTK) are persisted in NVS
+(`CONFIG_BT_NIMBLE_NVS_PERSIST=y`), so manual re-pairing is only
+needed after a factory reset of the camera.
 
-## Prérequis
+## Requirements
 
 - [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/get-started/)
-  **5.5.4** (installé via l'extension VSCode ou en CLI). Le code
-  n'utilise que des API NimBLE stables communes aux séries 5.x, mais a
-  été vérifié spécifiquement contre l'exemple officiel
-  `examples/bluetooth/nimble/blecent` de la branche 5.5.
-- Extension VSCode "Espressif IDF" (proposée automatiquement à
-  l'ouverture du dossier, voir `.vscode/extensions.json`)
-- Carte ESP32-C6
+  **5.5.4** (installed via the VSCode extension or the CLI). The code
+  only uses NimBLE APIs stable across the 5.x series, but has been
+  specifically verified against the official
+  `examples/bluetooth/nimble/blecent` example from the 5.5 branch.
+- "Espressif IDF" VSCode extension (automatically suggested when
+  opening the folder, see `.vscode/extensions.json`)
+- ESP32-C6 board
 
-## Ouvrir dans VSCode
+## Opening in VSCode
 
-1. Décompresser le projet, ouvrir le dossier dans VSCode.
-2. Installer l'extension ESP-IDF si proposé.
-3. `Ctrl+Shift+P` → "ESP-IDF: Configure ESP-IDF extension" (première
-   fois seulement) pour pointer vers votre installation IDF/Python.
+1. Unzip the project, open the folder in VSCode.
+2. Install the ESP-IDF extension if prompted.
+3. `Ctrl+Shift+P` → "ESP-IDF: Configure ESP-IDF extension" (first
+   time only) to point it at your IDF/Python installation.
 4. `Ctrl+Shift+P` → "ESP-IDF: Set Espressif Device Target" → `esp32c6`.
 5. `Ctrl+Shift+P` → "ESP-IDF: Build your project".
-6. Brancher la carte, sélectionner le port série, puis "ESP-IDF: Flash".
-7. "ESP-IDF: Monitor" pour voir les logs.
+6. Plug in the board, select the serial port, then "ESP-IDF: Flash".
+7. "ESP-IDF: Monitor" to view the logs.
 
-## En CLI (alternative à VSCode)
+## CLI (alternative to VSCode)
 
 ```bash
 . $HOME/esp/esp-idf/export.sh
@@ -152,35 +150,34 @@ idf.py build
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
-## Notes importantes
+## Important notes
 
-- **Bluedroid n'est pas supporté sur ESP32-C6** dans ESP-IDF : NimBLE
-  est le seul host disponible, c'est déjà configuré dans
+- **Bluedroid is not supported on the ESP32-C6** in ESP-IDF: NimBLE is
+  the only available host, already configured in
   `sdkconfig.defaults`.
-- `nimble_port_init()` retourne un `esp_err_t` et gère l'initialisation
-  du contrôleur BT en interne (plus besoin d'appeler
-  `esp_nimble_hci_init()` séparément) — c'est le comportement depuis
-  ESP-IDF 5.0, confirmé sur la branche 5.5.
-- Avant de connecter, la GoPro **doit** être en mode pairing (elle
-  n'advertise `0xFEA6` que dans cet état, ou pendant les 8h suivant
-  une mise en veille).
-- Le format de commande shutter (`03 01 01 01` / `03 01 01 00`) vient
-  du protocole Open GoPro Command TLV : `[longueur][id_commande]
-  [id_param][longueur_param][valeur]`.
-- Le premier `idf.py build` télécharge automatiquement le composant
-  `espressif/led_strip` (déclaré dans `main/idf_component.yml`) depuis
-  le registre de composants ESP-IDF — une connexion internet est donc
-  nécessaire au moins pour ce premier build.
-- Table de partitions : celle par défaut d'ESP-IDF (1 Mo) suffit
-  largement sans WiFi/serveur HTTP.
+- `nimble_port_init()` returns an `esp_err_t` and handles BT
+  controller initialization internally (no need to call
+  `esp_nimble_hci_init()` separately) — this has been the behavior
+  since ESP-IDF 5.0, confirmed on the 5.5 branch.
+- Before connecting, the GoPro **must** be in pairing mode (it only
+  advertises `0xFEA6` in that state, or for 8h after going to sleep).
+- The shutter command format (`03 01 01 01` / `03 01 01 00`) comes
+  from the Open GoPro Command TLV protocol:
+  `[length][command_id][param_id][param_length][value]`.
+- The first `idf.py build` automatically downloads the
+  `espressif/led_strip` component (declared in
+  `main/idf_component.yml`) from the ESP-IDF component registry — an
+  internet connection is therefore needed at least for that first
+  build.
+- Partition table: ESP-IDF's default (1MB) is more than enough
+  without WiFi/HTTP server.
 
-## Aller plus loin
+## Going further
 
-- Remplacer la structure de découverte GATT simplifiée ici par le
-  pattern `peer.c` officiel des exemples `blecent` d'ESP-IDF si vous
-  gérez plusieurs services/périphériques en parallèle.
-- Si un contrôle à distance reste souhaité malgré les soucis de
-  cohabitation radio, envisager un second module (ESP32 classique
-  avec Bluedroid, ou un module WiFi externe communiquant par UART/I2C
-  avec ce firmware) plutôt que de partager l'unique antenne du C6
-  entre BLE et WiFi.
+- Replace the simplified GATT discovery structure used here with the
+  official `peer.c` pattern from ESP-IDF's `blecent` examples if you
+  need to handle several services/peripherals in parallel.
+- If remote control is still desired despite the radio coexistence
+  issues, consider a second module (a classic Bluedroid-capable ESP32,
+  or an external WiFi module talking over UART/I2C to this firmware)
+  rather than sharing the C6's single antenna between BLE and WiFi.
