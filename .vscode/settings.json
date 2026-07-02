@@ -1,0 +1,33 @@
+{
+    // --- Fill these three in after installing ESP-IDF (see README) ---
+    // Run "ESP-IDF: Configure ESP-IDF extension" once and it will fill
+    // these in for you automatically; the values below are just the
+    // typical defaults for each OS as a reference.
+    "idf.espIdfPath": "",       // e.g. ~/esp/esp-idf  (Linux/macOS) or C:\\Espressif\\frameworks\\esp-idf-v5.5.4
+    "idf.toolsPath": "",        // e.g. ~/.espressif   (Linux/macOS) or C:\\Espressif\\tools
+    "idf.pythonBinPath": "",    // e.g. ~/.espressif/python_env/idf5.5_py3.x_env/bin/python
+
+    "idf.adapterTargetName": "esp32c6",
+
+    // ESP32-C6 has a built-in USB-Serial-JTAG peripheral: one USB-C
+    // cable is enough for flashing, monitoring AND debugging, no
+    // external ESP-Prog/JTAG probe required.
+    "idf.openOcdConfigs": [
+        "board/esp32c6-builtin.cfg"
+    ],
+
+    "idf.flashType": "UART",
+    "idf.baudRate": "460800",
+    "idf.monitorBaudRate": "115200",
+
+    // Leave "idf.port" empty to let the extension auto-detect the
+    // board, or set it explicitly, e.g. "/dev/ttyACM0", "COM5".
+    "idf.port": "",
+
+    "files.associations": {
+        "*.h": "c",
+        "*.c": "c"
+    },
+    "idf.currentSetup": "C:\\esp\\v5.5.4\\esp-idf",
+    "idf.portWin": "COM8"
+}

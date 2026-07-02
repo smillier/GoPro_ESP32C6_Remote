@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ESP-IDF: Set Target (esp32c6)",
+            "type": "shell",
+            "command": "idf.py set-target esp32c6",
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "ESP-IDF: Build",
+            "type": "shell",
+            "command": "idf.py build",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"],
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "ESP-IDF: Flash",
+            "type": "shell",
+            "command": "idf.py flash",
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" }
+        },
+        {
+            "label": "ESP-IDF: Monitor",
+            "type": "shell",
+            "command": "idf.py monitor",
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "isBackground": true
+        },
+        {
+            "label": "ESP-IDF: Flash and Monitor",
+            "type": "shell",
+            "command": "idf.py flash monitor",
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "isBackground": true
+        },
+        {
+            "label": "ESP-IDF: Full Clean",
+            "type": "shell",
+            "command": "idf.py fullclean",
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "shared" }
+        }
+    ]
+}

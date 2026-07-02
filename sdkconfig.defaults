@@ -1,0 +1,31 @@
+# Built/verified against ESP-IDF 5.5.4
+
+# --- Target ---
+CONFIG_IDF_TARGET="esp32c6"
+
+# --- Bluetooth / NimBLE ---
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+
+# ESP32-C6 only supports the NimBLE host in ESP-IDF (no Bluedroid)
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+
+# Security / bonding
+# Legacy Pairing (not LE Secure Connections) - confirmed necessary for
+# this GoPro to complete bonding instead of terminating the connection
+# on security request. See main.c for details.
+CONFIG_BT_NIMBLE_SM_LEGACY=y
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_MAX_BONDS=4
+CONFIG_BT_NIMBLE_MAX_CCCDS=12
+
+# Persist bonding keys (LTK/IRK) in NVS so we don't have to re-pair every boot
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+
+# --- Logging (handy while debugging pairing) ---
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
